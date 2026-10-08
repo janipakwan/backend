@@ -11,7 +11,7 @@ exports.listOutstandingOrders = async (req, res, next) => {
       const customers = await Customer.find({ $or: [{ name: new RegExp(search, 'i') }, { phone: new RegExp(search, 'i') }] }).select('_id');
       customerFilter = { customer: { $in: customers.map((customer) => customer._id) } };
     }
-    const orders = await Order.find({ dueAmount: { $gt: 0 }, ...customerFilter }).populate('customer', 'name phone').populate('degType', 'name').sort({ orderDate: 1 });
+    const orders = await Order.find({ dueAmount: { $gt: 0 }, ...customerFilter }).populate('customer', 'name phone').sort({ orderDate: 1 });
     res.json({ orders });
   } catch (error) { next(error); }
 };

@@ -25,7 +25,7 @@ exports.getCustomer = async (req, res, next) => {
   try {
     const customer = await Customer.findById(req.params.id);
     if (!customer) return res.status(404).json({ message: 'Customer not found.' });
-    const orders = await Order.find({ customer: customer._id }).populate('degType', 'name').sort({ orderDate: -1 });
+    const orders = await Order.find({ customer: customer._id }).sort({ orderDate: -1 });
     const orderIds = orders.map((order) => order._id);
     const payments = await Payment.find({ order: { $in: orderIds } }).sort({ paymentDate: -1 });
     res.json({ customer, orders, payments });

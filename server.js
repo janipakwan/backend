@@ -12,8 +12,6 @@ const ownerAdvanceRoutes = require('./routes/ownerAdvanceRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const { scheduleEmailReminder } = require('./jobs/emailReminder');
-const { verifyEmailTransporter } = require('./utils/emailSender');
 
 const app = express();
 const allowedOrigins = [
@@ -54,8 +52,7 @@ app.use((error, req, res, next) => {
 const port = Number(process.env.PORT) || 5000;
 connectDatabase()
   .then(async () => {
-    await verifyEmailTransporter();
-    await scheduleEmailReminder();
+
     app.listen(port, () => console.log(`API running at http://localhost:${port}`));
   })
   .catch((error) => {

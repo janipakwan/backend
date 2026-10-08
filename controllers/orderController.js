@@ -11,7 +11,7 @@ exports.createOrder = async (req, res, next) => {
   try {
     const quantity = Number(req.body.quantity);
     const advancePaid = Number(req.body.advancePaid || 0);
-    if (!Number.isInteger(quantity) || quantity < 1) return res.status(400).json({ message: 'Quantity must be at least 1.' });
+
     if (!Number.isFinite(advancePaid) || advancePaid < 0) return res.status(400).json({ message: 'Advance payment cannot be negative.' });
     if (!req.body.deliveryDate || Number.isNaN(new Date(req.body.deliveryDate).getTime())) return res.status(400).json({ message: 'A valid delivery date is required.' });
 
@@ -28,19 +28,37 @@ exports.createOrder = async (req, res, next) => {
         customer = await Customer.create([{ name, phone, address: req.body.customer.address?.trim() || '' }], { session }).then(([entry]) => entry);
       }
 
-      const deg = await Deg.findOne({ _id: req.body.degTypeId, isActive: true }).session(session);
-      if (!deg) throw Object.assign(new Error('Select an active deg type.'), { statusCode: 400 });
+      let items = req.body.items || [];
+      
+      // Fallback if they send legacy itemName
+      if (items.length === 0 && req.body.itemName) {
+        items = [{
+          name: req.body.itemName?.trim() || 'Item',
+          price: Number(req.body.pricePerUnit) || 0,
+          quantity: Number(req.body.quantity) || 1
+        }];
+      }
 
-      const totalAmount = deg.currentPrice * quantity;
+      if (items.length === 0) throw Object.assign(new Error('At least one item is required.'), { statusCode: 400 });
+
+      let totalAmount = 0;
+      items.forEach((item, idx) => {
+        const qty = Number(item.quantity);
+        const price = Number(item.price);
+        if (!Number.isFinite(price) || price < 0) throw Object.assign(new Error(`Item ${idx + 1}: Price cannot be negative.`), { statusCode: 400 });
+        if (!Number.isFinite(qty) || qty < 1) throw Object.assign(new Error(`Item ${idx + 1}: Quantity must be at least 1.`), { statusCode: 400 });
+        item.quantity = qty;
+        item.price = price;
+        totalAmount += price * qty;
+      });
+
       if (advancePaid > totalAmount) throw Object.assign(new Error('Advance payment cannot exceed the order total.'), { statusCode: 400 });
 
       const orderNumber = await getNextSequence('orderNumber');
 
       const [order] = await Order.create([{
         customer: customer._id,
-        degType: deg._id,
-        quantity,
-        pricePerDeg: deg.currentPrice,
+        items,
         totalAmount,
         advancePaid,
         dueAmount: totalAmount,
@@ -53,7 +71,7 @@ exports.createOrder = async (req, res, next) => {
         await Payment.create([{ order: order._id, customer: customer._id, amountPaid: advancePaid, method: req.body.advanceMethod || 'cash' }], { session });
         await recalculateOrderPaymentState(order._id, session);
       }
-      result = await Order.findById(order._id).populate('customer', 'name phone address').populate('degType', 'name').session(session);
+      result = await Order.findById(order._id).populate('customer', 'name phone address').session(session);
     });
     res.status(201).json({ order: result });
   } catch (error) {
@@ -65,8 +83,7 @@ exports.createOrder = async (req, res, next) => {
 exports.getOrder = async (req, res, next) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('customer', 'name phone address')
-      .populate('degType', 'name currentPrice');
+      .populate('customer', 'name phone address');
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
     const payments = await Payment.find({ order: order._id }).sort({ paymentDate: 1 });
