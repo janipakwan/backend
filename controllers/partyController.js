@@ -31,11 +31,25 @@ exports.addTransaction = async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
     const partyId = req.params.id;
-    const { type, amount, details, date } = req.body;
+    const { type, details, date } = req.body;
+    let items = req.body.items || [];
+    let amt = 0;
     
     if (!['purchase', 'payment'].includes(type)) return res.status(400).json({ message: 'Invalid transaction type.' });
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ message: 'Valid amount is required.' });
+
+    if (type === 'purchase' && items.length > 0) {
+      items.forEach((item, idx) => {
+        const price = Number(item.price);
+        if (!Number.isFinite(price) || price < 0) throw Object.assign(new Error(`Item ${idx + 1}: Price cannot be negative.`), { statusCode: 400 });
+        item.price = price;
+        amt += price;
+      });
+    } else {
+      amt = Number(req.body.amount);
+      items = [];
+    }
+
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ message: 'Valid amount or items with price are required.' });
 
     let updatedParty;
     let transaction;
@@ -47,6 +61,7 @@ exports.addTransaction = async (req, res, next) => {
       transaction = await PartyTransaction.create([{
         party: party._id,
         type,
+        items,
         amount: amt,
         details: details?.trim() || '',
         date: date ? new Date(date) : new Date()
