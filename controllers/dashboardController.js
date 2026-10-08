@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
 const OwnerAdvance = require('../models/OwnerAdvance');
+const Party = require('../models/Party');
 
 exports.getDashboard = async (req, res, next) => {
   try {
@@ -9,11 +10,12 @@ exports.getDashboard = async (req, res, next) => {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
 
-    const [todayOrders, allOrders, customerCount, advances] = await Promise.all([
+    const [todayOrders, allOrders, customerCount, advances, parties] = await Promise.all([
       Order.find({ orderDate: { $gte: start, $lt: end } }).select('totalAmount dueAmount'),
       Order.find().select('dueAmount'),
       Customer.countDocuments(),
-      OwnerAdvance.find({ status: 'pending' }).select('amount clearedAmount')
+      OwnerAdvance.find({ status: 'pending' }).select('amount clearedAmount'),
+      Party.find({ balance: { $gt: 0 } }).select('name balance')
     ]);
 
     const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
@@ -28,13 +30,17 @@ exports.getDashboard = async (req, res, next) => {
       0
     );
 
+    const totalPartyPayable = sum(parties, 'balance');
+
     res.json({
       todaySales,
       todayNewDues,
       totalPendingDues,
       pendingOwnerAdvance,
       orderCount: allOrders.length,
-      customerCount
+      customerCount,
+      totalPartyPayable,
+      partiesToPay: parties
     });
   } catch (error) {
     next(error);
