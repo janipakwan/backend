@@ -92,3 +92,53 @@ exports.getOrder = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.updateOrder = async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    if (req.body.notes !== undefined) order.notes = req.body.notes?.trim() || '';
+    if (req.body.deliveryDate) order.deliveryDate = new Date(req.body.deliveryDate);
+
+    // Update items and recalculate total if provided
+    if (req.body.items && req.body.items.length > 0) {
+      let total = 0;
+      const items = req.body.items.map(item => {
+        const qty = Number(item.quantity) || 1;
+        const price = Number(item.price) || 0;
+        total += qty * price;
+        return {
+          name: item.name?.trim() || 'Item',
+          quantity: qty,
+          price,
+          details: item.details?.trim() || ''
+        };
+      });
+      order.items = items;
+      order.totalAmount = total;
+    }
+
+    await order.save();
+    await recalculateOrderPaymentState(order._id);
+
+    const populated = await Order.findById(order._id).populate('customer', 'name phone address');
+    res.json({ order: populated });
+  } catch (error) { next(error); }
+};
+
+exports.deleteOrder = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const order = await Order.findByIdAndDelete(req.params.id).session(session);
+      if (!order) throw Object.assign(new Error('Order not found.'), { statusCode: 404 });
+      await Payment.deleteMany({ order: order._id }).session(session);
+    });
+    res.json({ message: 'Order deleted successfully.' });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ message: error.message });
+    next(error);
+  } finally { await session.endSession(); }
+};
+

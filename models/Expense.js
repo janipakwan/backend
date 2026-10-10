@@ -8,7 +8,8 @@ const expenseSchema = new mongoose.Schema({
     price: { type: Number, required: true, min: 0 }
   }],
   amount: { type: Number, required: true, min: 0.01 },
-  paidBy: { type: String, enum: ['sale', 'owner_advance'], required: true },
+  type: { type: String, enum: ['expense', 'income'], default: 'expense' },
+  paidBy: { type: String, enum: ['sale', 'owner_advance', 'none'], default: 'sale' },
   date: { type: Date, required: true, default: Date.now },
   ownerAdvance: { type: mongoose.Schema.Types.ObjectId, ref: 'OwnerAdvance', default: null }
 }, { timestamps: true });

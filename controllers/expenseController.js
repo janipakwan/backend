@@ -19,9 +19,12 @@ exports.listExpenses = async (req, res, next) => {
 exports.createExpense = async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
-    const description = req.body.description?.trim() || '';
+    let description = req.body.description?.trim() || '';
     let items = req.body.items || [];
     let amount = 0;
+
+    const paidBy = req.body.paidBy || 'sale';
+    const type = req.body.type || 'expense';
 
     if (items.length > 0) {
       items.forEach((item, idx) => {
@@ -35,11 +38,10 @@ exports.createExpense = async (req, res, next) => {
       });
     } else {
       amount = Number(req.body.amount);
-      if (!description) return res.status(400).json({ message: 'Description or items are required.' });
+      if (!description) {
+        description = type === 'income' ? 'Amdan (Income)' : 'Kharch';
+      }
     }
-
-    const paidBy = req.body.paidBy || 'sale';
-    const type = req.body.type || 'expense';
     const date = req.body.date ? new Date(req.body.date) : new Date();
     if (!Number.isFinite(amount) || amount <= 0 || !['sale', 'owner_advance', 'none'].includes(paidBy) || Number.isNaN(date.getTime())) return res.status(400).json({ message: 'Valid amount, source, and date are required.' });
     let result;

@@ -29,3 +29,26 @@ exports.login = async (req, res, next) => {
 };
 
 exports.me = async (req, res) => res.json({ user: publicUser(req.user) });
+
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Purana aur naya password dono likhein.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Naya password kam az kam 6 characters ka hona chahiye.' });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user || !(await user.comparePassword(currentPassword))) {
+      return res.status(400).json({ message: 'Purana password ghalat hai (Incorrect password).' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    res.json({ message: 'Password kamyabi se badal diya gaya hai.' });
+  } catch (error) {
+    next(error);
+  }
+};

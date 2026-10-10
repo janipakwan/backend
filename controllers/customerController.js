@@ -31,3 +31,24 @@ exports.getCustomer = async (req, res, next) => {
     res.json({ customer, orders, payments });
   } catch (error) { next(error); }
 };
+
+exports.updateCustomer = async (req, res, next) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ message: 'Customer not found.' });
+    if (req.body.name) customer.name = req.body.name.trim();
+    if (req.body.phone !== undefined) customer.phone = req.body.phone.trim();
+    if (req.body.address !== undefined) customer.address = req.body.address.trim();
+    await customer.save();
+    res.json({ customer });
+  } catch (error) { next(error); }
+};
+
+exports.deleteCustomer = async (req, res, next) => {
+  try {
+    const customer = await Customer.findByIdAndDelete(req.params.id);
+    if (!customer) return res.status(404).json({ message: 'Customer not found.' });
+    res.json({ message: 'Customer deleted successfully.' });
+  } catch (error) { next(error); }
+};
+
