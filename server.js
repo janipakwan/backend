@@ -8,7 +8,6 @@ const customerRoutes = require('./routes/customerRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
-const ownerAdvanceRoutes = require('./routes/ownerAdvanceRoutes');
 const partyRoutes = require('./routes/partyRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
@@ -40,8 +39,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/parties', partyRoutes);
-app.use('/api/owner-advances', ownerAdvanceRoutes);
 app.use('/api/settings', settingsRoutes);
+
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
 

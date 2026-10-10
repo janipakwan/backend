@@ -9,10 +9,10 @@ const expenseSchema = new mongoose.Schema({
   }],
   amount: { type: Number, required: true, min: 0.01 },
   type: { type: String, enum: ['expense', 'income'], default: 'expense' },
-  paidBy: { type: String, enum: ['sale', 'owner_advance', 'none'], default: 'sale' },
-  date: { type: Date, required: true, default: Date.now },
-  ownerAdvance: { type: mongoose.Schema.Types.ObjectId, ref: 'OwnerAdvance', default: null }
+  paidBy: { type: String, enum: ['sale', 'none'], default: 'sale' },
+  date: { type: Date, required: true, default: Date.now }
 }, { timestamps: true });
+
 
 expenseSchema.index({ date: -1 });
 module.exports = mongoose.model('Expense', expenseSchema);

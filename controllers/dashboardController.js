@@ -1,6 +1,5 @@
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
-const OwnerAdvance = require('../models/OwnerAdvance');
 const Party = require('../models/Party');
 const Expense = require('../models/Expense');
 
@@ -11,11 +10,10 @@ exports.getDashboard = async (req, res, next) => {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
 
-    const [todayOrders, allOrders, customerCount, advances, parties, allExpenses, todayExpenses] = await Promise.all([
+    const [todayOrders, allOrders, customerCount, parties, allExpenses, todayExpenses] = await Promise.all([
       Order.find({ orderDate: { $gte: start, $lt: end } }).select('totalAmount dueAmount'),
       Order.find().select('dueAmount'),
       Customer.countDocuments(),
-      OwnerAdvance.find({ status: 'pending' }).select('amount clearedAmount'),
       Party.find({ balance: { $gt: 0 } }).select('name balance'),
       Expense.find().select('amount type description items date'),
       Expense.find({ date: { $gte: start, $lt: end } }).select('amount type description items')
@@ -35,10 +33,6 @@ exports.getDashboard = async (req, res, next) => {
     const totalPendingDues = allOrders
       .filter((o) => Number(o.dueAmount) > 0)
       .reduce((total, o) => total + Number(o.dueAmount || 0), 0);
-    const pendingOwnerAdvance = advances.reduce(
-      (total, advance) => total + Math.max(0, Number(advance.amount || 0) - Number(advance.clearedAmount || 0)),
-      0
-    );
 
     const totalPartyPayable = sum(parties, 'balance');
 
@@ -46,7 +40,6 @@ exports.getDashboard = async (req, res, next) => {
       todaySales,
       todayNewDues,
       totalPendingDues,
-      pendingOwnerAdvance,
       orderCount: allOrders.length,
       customerCount,
       totalPartyPayable,
@@ -60,3 +53,4 @@ exports.getDashboard = async (req, res, next) => {
     next(error);
   }
 };
+

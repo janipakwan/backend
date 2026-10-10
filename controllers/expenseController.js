@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Expense = require('../models/Expense');
-const OwnerAdvance = require('../models/OwnerAdvance');
 
 exports.listExpenses = async (req, res, next) => {
   try { 
@@ -17,7 +16,6 @@ exports.listExpenses = async (req, res, next) => {
 };
 
 exports.createExpense = async (req, res, next) => {
-  const session = await mongoose.startSession();
   try {
     let description = req.body.description?.trim() || '';
     let items = req.body.items || [];
@@ -43,19 +41,21 @@ exports.createExpense = async (req, res, next) => {
       }
     }
     const date = req.body.date ? new Date(req.body.date) : new Date();
-    if (!Number.isFinite(amount) || amount <= 0 || !['sale', 'owner_advance', 'none'].includes(paidBy) || Number.isNaN(date.getTime())) return res.status(400).json({ message: 'Valid amount, source, and date are required.' });
-    let result;
-    await session.withTransaction(async () => {
-      let advance = null;
-      if (paidBy === 'owner_advance') {
-        const advReason = description || (items.length > 0 ? items.map(i => i.name).join(', ') : 'Expense items');
-        [advance] = await OwnerAdvance.create([{ amount, reason: advReason, date, status: 'pending', clearedAmount: 0 }], { session });
-      }
-      const [expense] = await Expense.create([{ description, items, amount, type, paidBy, date, ownerAdvance: advance?._id || null }], { session });
-      result = { expense, ownerAdvance: advance };
+    if (!Number.isFinite(amount) || amount <= 0 || Number.isNaN(date.getTime())) {
+      return res.status(400).json({ message: 'Valid amount and date are required.' });
+    }
+
+    const expense = await Expense.create({
+      description,
+      items,
+      amount,
+      type,
+      paidBy: 'sale',
+      date
     });
-    res.status(201).json(result);
-  } catch (error) { next(error); } finally { await session.endSession(); }
+
+    res.status(201).json({ expense });
+  } catch (error) { next(error); }
 };
 
 exports.updateExpense = async (req, res, next) => {
@@ -75,7 +75,7 @@ exports.updateExpense = async (req, res, next) => {
     expense.items = items.length > 0 ? items : expense.items;
     expense.amount = amount || expense.amount;
     expense.type = req.body.type || expense.type;
-    expense.paidBy = req.body.paidBy || expense.paidBy;
+    expense.paidBy = 'sale';
     expense.date = req.body.date ? new Date(req.body.date) : expense.date;
     await expense.save();
     res.json({ expense });
@@ -86,10 +86,7 @@ exports.deleteExpense = async (req, res, next) => {
   try {
     const expense = await Expense.findByIdAndDelete(req.params.id);
     if (!expense) return res.status(404).json({ message: 'Expense not found.' });
-    // If linked to owner advance, delete that too
-    if (expense.ownerAdvance) {
-      await OwnerAdvance.findByIdAndDelete(expense.ownerAdvance);
-    }
     res.json({ message: 'Deleted successfully.' });
   } catch (error) { next(error); }
 };
+
