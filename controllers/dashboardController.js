@@ -10,13 +10,14 @@ exports.getDashboard = async (req, res, next) => {
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
 
-    const [todayOrders, allOrders, customerCount, parties, allExpenses, todayExpenses] = await Promise.all([
+    const [todayOrders, allOrders, customerCount, parties, allExpenses, todayExpenses, customersWithBalance] = await Promise.all([
       Order.find({ orderDate: { $gte: start, $lt: end } }).select('totalAmount dueAmount'),
       Order.find().select('dueAmount'),
       Customer.countDocuments(),
       Party.find({ balance: { $gt: 0 } }).select('name balance'),
       Expense.find().select('amount type description items date'),
-      Expense.find({ date: { $gte: start, $lt: end } }).select('amount type description items')
+      Expense.find({ date: { $gte: start, $lt: end } }).select('amount type description items'),
+      Customer.find({ balance: { $gt: 0 } }).select('name balance')
     ]);
 
     const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
@@ -30,9 +31,11 @@ exports.getDashboard = async (req, res, next) => {
 
     const todaySales = sum(todayOrders, 'totalAmount');
     const todayNewDues = sum(todayOrders, 'dueAmount');
-    const totalPendingDues = allOrders
+    const totalOrderDues = allOrders
       .filter((o) => Number(o.dueAmount) > 0)
       .reduce((total, o) => total + Number(o.dueAmount || 0), 0);
+    const totalCustomerLedgerDues = sum(customersWithBalance, 'balance');
+    const totalPendingDues = totalOrderDues + totalCustomerLedgerDues;
 
     const totalPartyPayable = sum(parties, 'balance');
 

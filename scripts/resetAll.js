@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
+const CustomerTransaction = require('../models/CustomerTransaction');
 const Payment = require('../models/Payment');
 const Expense = require('../models/Expense');
 const Party = require('../models/Party');
@@ -29,6 +30,10 @@ async function resetAll() {
     // Delete all customers
     r = await Customer.deleteMany({});
     results.push(`Customers:         ${r.deletedCount} deleted`);
+
+    // Delete all customer ledger transactions
+    r = await CustomerTransaction.deleteMany({});
+    results.push(`CustomerTrans:     ${r.deletedCount} deleted`);
 
     // Delete all payments
     r = await Payment.deleteMany({});
