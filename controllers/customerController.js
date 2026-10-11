@@ -46,9 +46,25 @@ exports.updateCustomer = async (req, res, next) => {
 
 exports.deleteCustomer = async (req, res, next) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findById(req.params.id);
     if (!customer) return res.status(404).json({ message: 'Customer not found.' });
-    res.json({ message: 'Customer deleted successfully.' });
+
+    // Find all orders of this customer
+    const orders = await Order.find({ customer: customer._id }).select('_id');
+    const orderIds = orders.map(o => o._id);
+
+    // Delete all payments linked to these orders
+    if (orderIds.length > 0) {
+      await Payment.deleteMany({ order: { $in: orderIds } });
+    }
+
+    // Delete all orders of this customer
+    await Order.deleteMany({ customer: customer._id });
+
+    // Finally delete the customer
+    await Customer.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Customer and all related orders & payments deleted successfully.' });
   } catch (error) { next(error); }
 };
 
