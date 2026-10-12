@@ -67,12 +67,22 @@ exports.getCustomer = async (req, res, next) => {
     for (const order of orders) {
       const isLinked = postedOrderIds.has(order._id.toString()) || (order.orderNumber && postedOrderNumbers.has(order.orderNumber));
       if (!order.addedToLedger && isLinked) {
+        // Linked transactions exist but flag is false — set it
         order.addedToLedger = true;
         order.status = 'transferred_to_ledger';
         order.addedToLedgerAt = order.updatedAt || new Date();
         await Order.updateOne(
           { _id: order._id },
           { $set: { addedToLedger: true, status: 'transferred_to_ledger', addedToLedgerAt: order.addedToLedgerAt } }
+        );
+      } else if (order.addedToLedger && !isLinked) {
+        // Flag is true but linked transactions were deleted — reset it
+        order.addedToLedger = false;
+        order.addedToLedgerAt = undefined;
+        order.status = order.dueAmount > 0 ? (order.advancePaid > 0 ? 'partially_paid' : 'pending') : 'paid';
+        await Order.updateOne(
+          { _id: order._id },
+          { $set: { addedToLedger: false, status: order.status }, $unset: { addedToLedgerAt: 1 } }
         );
       }
     }
@@ -208,6 +218,21 @@ exports.deleteCustomerTransaction = async (req, res, next) => {
     await session.withTransaction(async () => {
       const txn = await CustomerTransaction.findByIdAndDelete(req.params.txnId).session(session);
       if (!txn) throw Object.assign(new Error('Transaction not found.'), { statusCode: 404 });
+
+      // If this transaction was linked to an order, check if any other linked txns remain
+      if (txn.order) {
+        const remainingLinked = await CustomerTransaction.countDocuments({ order: txn.order }).session(session);
+        if (remainingLinked === 0) {
+          // No more linked transactions — reset order's addedToLedger flag
+          const linkedOrder = await Order.findById(txn.order).session(session);
+          if (linkedOrder && linkedOrder.addedToLedger) {
+            linkedOrder.addedToLedger = false;
+            linkedOrder.addedToLedgerAt = undefined;
+            linkedOrder.status = linkedOrder.dueAmount > 0 ? (linkedOrder.advancePaid > 0 ? 'partially_paid' : 'pending') : 'paid';
+            await linkedOrder.save({ session });
+          }
+        }
+      }
 
       const customer = await Customer.findById(txn.customer).session(session);
       if (customer) {
