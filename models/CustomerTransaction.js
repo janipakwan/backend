@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const customerTransactionSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+  order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
   type: { type: String, enum: ['sale', 'payment'], required: true }, // 'sale' = Daig / Samaan Bheja, 'payment' = Wasooli / Payment Aayi
   items: [{
     name: { type: String, required: true },

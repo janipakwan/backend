@@ -52,6 +52,31 @@ exports.getCustomer = async (req, res, next) => {
 
     // Existing orders and payments for this customer
     const orders = await Order.find({ customer: customer._id }).sort({ orderDate: -1 });
+
+    // Detect orders already posted to khata to sync status and prevent duplicates
+    const postedOrderIds = new Set();
+    const postedOrderNumbers = new Set();
+    transactions.forEach(t => {
+      if (t.order) postedOrderIds.add(t.order.toString());
+      if (t.details) {
+        const match = t.details.match(/Booking Order\s*#?(\d+)/i);
+        if (match) postedOrderNumbers.add(Number(match[1]));
+      }
+    });
+
+    for (const order of orders) {
+      const isLinked = postedOrderIds.has(order._id.toString()) || (order.orderNumber && postedOrderNumbers.has(order.orderNumber));
+      if (!order.addedToLedger && isLinked) {
+        order.addedToLedger = true;
+        order.status = 'transferred_to_ledger';
+        order.addedToLedgerAt = order.updatedAt || new Date();
+        await Order.updateOne(
+          { _id: order._id },
+          { $set: { addedToLedger: true, status: 'transferred_to_ledger', addedToLedgerAt: order.addedToLedgerAt } }
+        );
+      }
+    }
+
     const orderIds = orders.map((order) => order._id);
     const payments = await Payment.find({ order: { $in: orderIds } }).sort({ paymentDate: -1 });
 

@@ -18,7 +18,9 @@ const orderSchema = new mongoose.Schema(
     dueAmount: { type: Number, required: true, min: 0 },
     orderDate: { type: Date, default: Date.now },
     deliveryDate: { type: Date, required: true },
-    status: { type: String, enum: ['pending', 'partially_paid', 'paid', 'delivered'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'partially_paid', 'paid', 'delivered', 'transferred_to_ledger'], default: 'pending' },
+    addedToLedger: { type: Boolean, default: false },
+    addedToLedgerAt: { type: Date },
     notes: { type: String, trim: true, default: '', maxlength: 1000 },
     orderNumber: { type: Number, unique: true, sparse: true }
   },
