@@ -11,7 +11,7 @@ const orderSchema = new mongoose.Schema(
       name: { type: String, required: true },
       details: { type: String, trim: true, default: '' },
       quantity: { type: Number, required: true, min: 1 },
-      price: { type: Number, required: true, min: 0 }
+      price: { type: Number, default: 0, min: 0 }
     }],
     totalAmount: { type: Number, required: true, min: 0 },
     advancePaid: { type: Number, default: 0, min: 0 },

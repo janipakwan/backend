@@ -25,8 +25,9 @@ exports.createOrder = async (req, res, next) => {
       } else {
         const name = req.body.customer?.name?.trim();
         const phone = req.body.customer?.phone?.trim();
+        const phone2 = req.body.customer?.phone2?.trim() || '';
         if (!name || !phone) throw Object.assign(new Error('Select an existing customer or enter a new customer name and phone.'), { statusCode: 400 });
-        customer = await Customer.create([{ name, phone, address: req.body.customer.address?.trim() || '' }], { session }).then(([entry]) => entry);
+        customer = await Customer.create([{ name, phone, phone2, address: req.body.customer.address?.trim() || '' }], { session }).then(([entry]) => entry);
       }
 
       let items = req.body.items || [];
@@ -45,7 +46,7 @@ exports.createOrder = async (req, res, next) => {
       let totalAmount = 0;
       items.forEach((item, idx) => {
         const qty = Number(item.quantity);
-        const price = Number(item.price);
+        const price = Number(item.price) || 0;
         if (!Number.isFinite(price) || price < 0) throw Object.assign(new Error(`Item ${idx + 1}: Price cannot be negative.`), { statusCode: 400 });
         if (!Number.isFinite(qty) || qty < 1) throw Object.assign(new Error(`Item ${idx + 1}: Quantity must be at least 1.`), { statusCode: 400 });
         item.quantity = qty;
@@ -72,7 +73,7 @@ exports.createOrder = async (req, res, next) => {
         await Payment.create([{ order: order._id, customer: customer._id, amountPaid: advancePaid, method: req.body.advanceMethod || 'cash' }], { session });
         await recalculateOrderPaymentState(order._id, session);
       }
-      result = await Order.findById(order._id).populate('customer', 'name phone address').session(session);
+      result = await Order.findById(order._id).populate('customer', 'name phone phone2 address').session(session);
     });
     res.status(201).json({ order: result });
   } catch (error) {
@@ -84,7 +85,7 @@ exports.createOrder = async (req, res, next) => {
 exports.getOrder = async (req, res, next) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('customer', 'name phone address');
+      .populate('customer', 'name phone phone2 address');
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
     const payments = await Payment.find({ order: order._id }).sort({ paymentDate: 1 });
@@ -123,7 +124,7 @@ exports.updateOrder = async (req, res, next) => {
     await order.save();
     await recalculateOrderPaymentState(order._id);
 
-    const populated = await Order.findById(order._id).populate('customer', 'name phone address');
+    const populated = await Order.findById(order._id).populate('customer', 'name phone phone2 address');
     res.json({ order: populated });
   } catch (error) { next(error); }
 };

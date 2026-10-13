@@ -23,6 +23,7 @@ exports.createCustomer = async (req, res, next) => {
     const customer = await Customer.create({
       name,
       phone,
+      phone2: req.body.phone2?.trim() || '',
       address: req.body.address?.trim() || '',
       balance: openingBalance
     });
@@ -255,6 +256,7 @@ exports.updateCustomer = async (req, res, next) => {
     if (!customer) return res.status(404).json({ message: 'Customer not found.' });
     if (req.body.name) customer.name = req.body.name.trim();
     if (req.body.phone !== undefined) customer.phone = req.body.phone.trim();
+    if (req.body.phone2 !== undefined) customer.phone2 = req.body.phone2.trim();
     if (req.body.address !== undefined) customer.address = req.body.address.trim();
     await customer.save();
     res.json({ customer });
