@@ -7,6 +7,51 @@ const Payment = require('../models/Payment');
 const { recalculateOrderPaymentState } = require('../utils/orderPayments');
 const { getNextSequence } = require('../utils/counter');
 
+const syncOrderToLedger = async (order, customer, session) => {
+  const items = (order.items && order.items.length > 0)
+    ? order.items.map(i => ({ name: i.name, quantity: i.quantity || 1, price: i.price }))
+    : [{ name: order.itemName || 'Booking Deg', quantity: order.quantity || 1, price: order.pricePerDeg || order.totalAmount }];
+
+  const orderLabel = order.orderNumber ? `#${String(order.orderNumber).padStart(4, '0')}` : '';
+
+  // 1. Create Sale transaction
+  await CustomerTransaction.create([{
+    customer: customer._id,
+    order: order._id,
+    type: 'sale',
+    items,
+    amount: order.totalAmount,
+    details: `Booking Order ${orderLabel} ka Bill`.trim(),
+    date: order.deliveryDate || order.orderDate || new Date()
+  }], { session });
+
+  let netBalanceChange = order.totalAmount;
+
+  // 2. If advance was paid, record payment transaction
+  if (order.advancePaid && order.advancePaid > 0) {
+    await CustomerTransaction.create([{
+      customer: customer._id,
+      order: order._id,
+      type: 'payment',
+      amount: order.advancePaid,
+      details: `Booking Order ${orderLabel} Advance Wasooli`.trim(),
+      date: order.orderDate || new Date()
+    }], { session });
+
+    netBalanceChange -= order.advancePaid;
+  }
+
+  // 3. Update customer khata balance
+  customer.balance = (Number(customer.balance) || 0) + netBalanceChange;
+  await customer.save({ session });
+
+  // 4. Mark order as addedToLedger
+  order.addedToLedger = true;
+  order.addedToLedgerAt = new Date();
+  order.status = 'transferred_to_ledger';
+  await order.save({ session });
+};
+
 exports.createOrder = async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
@@ -26,8 +71,26 @@ exports.createOrder = async (req, res, next) => {
         const name = req.body.customer?.name?.trim();
         const phone = req.body.customer?.phone?.trim();
         const phone2 = req.body.customer?.phone2?.trim() || '';
+        const openingBalance = Number(req.body.customer?.openingBalance) || 0;
         if (!name || !phone) throw Object.assign(new Error('Select an existing customer or enter a new customer name and phone.'), { statusCode: 400 });
-        customer = await Customer.create([{ name, phone, phone2, address: req.body.customer.address?.trim() || '' }], { session }).then(([entry]) => entry);
+        
+        customer = await Customer.create([{ 
+          name, 
+          phone, 
+          phone2, 
+          address: req.body.customer.address?.trim() || '',
+          balance: openingBalance
+        }], { session }).then(([entry]) => entry);
+
+        if (openingBalance !== 0) {
+          await CustomerTransaction.create([{
+            customer: customer._id,
+            type: openingBalance > 0 ? 'sale' : 'payment',
+            amount: Math.abs(openingBalance),
+            details: openingBalance > 0 ? 'Sabqa Baqaya (Opening Balance)' : 'Advance Jama (Opening Balance)',
+            date: new Date()
+          }], { session });
+        }
       }
 
       let items = req.body.items || [];
@@ -73,7 +136,13 @@ exports.createOrder = async (req, res, next) => {
         await Payment.create([{ order: order._id, customer: customer._id, amountPaid: advancePaid, method: req.body.advanceMethod || 'cash' }], { session });
         await recalculateOrderPaymentState(order._id, session);
       }
-      result = await Order.findById(order._id).populate('customer', 'name phone phone2 address').session(session);
+
+      // If Khata option was selected, add directly to Khata
+      if (req.body.addToKhata) {
+        await syncOrderToLedger(order, customer, session);
+      }
+
+      result = await Order.findById(order._id).populate('customer', 'name phone phone2 address balance').session(session);
     });
     res.status(201).json({ order: result });
   } catch (error) {
@@ -195,48 +264,7 @@ exports.addOrderToLedger = async (req, res, next) => {
         throw Object.assign(new Error('Customer nahi mila.'), { statusCode: 404 });
       }
 
-      const items = (order.items && order.items.length > 0)
-        ? order.items.map(i => ({ name: i.name, quantity: i.quantity || 1, price: i.price }))
-        : [{ name: order.itemName || 'Booking Deg', quantity: order.quantity || 1, price: order.pricePerDeg || order.totalAmount }];
-
-      const orderLabel = order.orderNumber ? `#${String(order.orderNumber).padStart(4, '0')}` : '';
-
-      // 1. Create Sale transaction
-      await CustomerTransaction.create([{
-        customer: customer._id,
-        order: order._id,
-        type: 'sale',
-        items,
-        amount: order.totalAmount,
-        details: `Booking Order ${orderLabel} ka Bill`.trim(),
-        date: order.deliveryDate || order.orderDate || new Date()
-      }], { session });
-
-      let netBalanceChange = order.totalAmount;
-
-      // 2. If advance was paid, record payment transaction
-      if (order.advancePaid && order.advancePaid > 0) {
-        await CustomerTransaction.create([{
-          customer: customer._id,
-          order: order._id,
-          type: 'payment',
-          amount: order.advancePaid,
-          details: `Booking Order ${orderLabel} Advance Wasooli`.trim(),
-          date: order.orderDate || new Date()
-        }], { session });
-
-        netBalanceChange -= order.advancePaid;
-      }
-
-      // 3. Update customer khata balance
-      customer.balance = (Number(customer.balance) || 0) + netBalanceChange;
-      await customer.save({ session });
-
-      // 4. Mark order as addedToLedger
-      order.addedToLedger = true;
-      order.addedToLedgerAt = new Date();
-      order.status = 'transferred_to_ledger';
-      await order.save({ session });
+      await syncOrderToLedger(order, customer, session);
 
       resultOrder = order;
       resultCustomer = customer;
