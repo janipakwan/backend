@@ -137,10 +137,8 @@ exports.createOrder = async (req, res, next) => {
         await recalculateOrderPaymentState(order._id, session);
       }
 
-      // If Khata option was selected, add directly to Khata
-      if (req.body.addToKhata) {
-        await syncOrderToLedger(order, customer, session);
-      }
+      // Automatically add order into Customer Khata (Ledger)
+      await syncOrderToLedger(order, customer, session);
 
       result = await Order.findById(order._id).populate('customer', 'name phone phone2 address balance').session(session);
     });
